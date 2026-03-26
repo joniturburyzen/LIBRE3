@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#FF6B9D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ogu">
+<title>Ogu</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+
+<style>
+/* ── Reset & Variables ──────────────────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+:root {
+  --bg:      #080A14;
+  --bg2:     #09090F;
+  --panel:   #0F0F1C;
+  --b-ogu:   #161626;
+  --pink:    #FF6B9D;
+  --purple:  #C44DFF;
+  --white:   #FFFFFF;
+  --dim:     rgba(255,255,255,0.18);
+}
+
+html {
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ── Zona 3D ────────────────────────────────────────────────────────────── */
+#scene {
+  position: relative;
+  flex: 0 0 52%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#scene canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Viñeta sobre canvas */
+#vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 35%, transparent 35%, rgba(8,10,20,.55) 100%);
+}
+
+/* Fade inferior — mezcla 3D con chat */
+#fade-btm {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 80px; pointer-events: none;
+  background: linear-gradient(transparent, var(--bg2));
+}
+
+/* Etiqueta nombre */
+#nametag {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 14px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px;
+  background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,107,157,.28);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+  font-size: 11px; color: rgba(255,255,255,.72);
+  letter-spacing: .3px;
+  user-select: none;
+  box-shadow: 0 0 12px rgba(255,107,157,.06);
+}
+#dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pink);
+  transition: background .5s, box-shadow .5s;
+  box-shadow: 0 0 6px var(--pink);
+}
+#dot.ready { background:#44FF88; box-shadow: 0 0 7px #44FF88; }
+
+/* Pantalla de carga */
+#loading {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  pointer-events: none; transition: opacity .7s;
+}
+#loading-title {
+  font-size: 22px; letter-spacing: 8px; font-weight: 300;
+  color: rgba(255,107,157,.75); text-transform: uppercase;
+}
+#loading-bar {
+  width: 110px; height: 2px;
+  background: rgba(255,107,157,.12); border-radius: 2px; overflow: hidden;
+}
+#loading-fill {
+  height: 100%; width: 0%;
+  background: rgba(255,107,157,.75); border-radius: 2px;
+  transition: width .3s ease;
+}
+#loading-sub {
+  font-size: 10px; letter-spacing: 2px;
+  color: rgba(255,107,157,.35); text-transform: lowercase;
+}
+
+/* ── Separador ──────────────────────────────────────────────────────────── */
+#sep {
+  flex-shrink: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--pink), transparent);
+  opacity: .5;
+}
+
+/* ── Chat ───────────────────────────────────────────────────────────────── */
+#chat {
+  flex: 1;
+  display: flex; flex-direction: column;
+  background: var(--bg2);
+  overflow: hidden;
+  min-height: 0;
+}
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px 6px;
+  display: flex; flex-direction: column; gap: 6px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollbar invisible */
+#messages::-webkit-scrollbar { display: none; }
+#messages { scrollbar-width: none; }
+
+/* Estado vacío */
+#empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: rgba(255,255,255,.1);
+  letter-spacing: 2px;
+  user-select: none;
+}
+
+/* Burbujas */
+.msg {
+  max-width: 78%;
+  padding: 10px 15px;
+  border-radius: 18px;
+  font-size: 15px; line-height: 1.45;
+  color: var(--white);
+  word-break: break-word;
+  animation: msgIn .26s cubic-bezier(.22,.68,0,1.2) both;
+}
+.msg.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 3px 12px rgba(255,107,157,.22);
+}
+.msg.ogu {
+  align-self: flex-start;
+  background: var(--b-ogu);
+  border-bottom-left-radius: 4px;
+}
+
+@keyframes msgIn {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* Typing dots */
+#typing {
+  display: none;
+  align-self: flex-start;
+  padding: 11px 16px;
+  background: var(--b-ogu);
+  border-radius: 18px; border-bottom-left-radius: 4px;
+  gap: 5px; align-items: center;
+}
+#typing.show { display: flex; }
+
+.dot-bounce {
+  width: 7px; border-radius: 4px;
+  background: rgba(255,255,255,.45);
+  animation: bounce .6s ease-in-out infinite;
+}
+.dot-bounce:nth-child(1) { animation-delay: 0ms;   height: 7px; }
+.dot-bounce:nth-child(2) { animation-delay: 200ms; height: 7px; }
+.dot-bounce:nth-child(3) { animation-delay: 400ms; height: 7px; }
+
+@keyframes bounce {
+  0%,100% { height:7px; opacity:.4; }
+  50%      { height:12px; opacity:1; box-shadow: 0 0 4px var(--pink); }
+}
+
+/* ── Input bar ──────────────────────────────────────────────────────────── */
+#inputbar {
+  flex-shrink: 0;
+  display: flex; align-items: flex-end; gap: 10px;
+  padding: 8px 12px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  background: var(--bg2);
+}
+
+#input-wrap {
+  flex: 1;
+  background: #14141F;
+  border: 1px solid rgba(255,107,157,.14);
+  border-radius: 26px;
+  transition: border-color .2s, box-shadow .2s;
+  display: flex; align-items: center;
+}
+#input-wrap:focus-within {
+  border-color: rgba(255,107,157,.5);
+  box-shadow: 0 0 14px rgba(255,107,157,.08);
+}
+
+#input {
+  flex: 1;
+  background: transparent;
+  border: none; outline: none;
+  color: var(--white);
+  font-size: 16px; /* ≥16px evita zoom en iOS */
+  padding: 12px 18px;
+  resize: none;
+  max-height: 100px;
+  line-height: 1.4;
+  font-family: inherit;
+  -webkit-appearance: none;
+}
+#input::placeholder { color: rgba(255,255,255,.2); }
+
+#sendbtn {
+  flex-shrink: 0;
+  width: 48px; height: 48px; border-radius: 50%;
+  border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  box-shadow: 0 0 16px rgba(255,107,157,.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .1s ease, box-shadow .1s;
+  -webkit-appearance: none;
+}
+#sendbtn:active { transform: scale(.82); box-shadow: 0 0 6px rgba(255,107,157,.2); }
+#sendbtn svg { width:20px; height:20px; }
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ── ZONA 3D ──────────────────────────────────────────────────────── -->
+  <div id="scene">
+    <!-- canvas Three.js se inserta aquí por JS -->
+    <div id="vignette"></div>
+    <div id="fade-btm"></div>
+    <div id="nametag">
+      <div id="dot"></div>
+      <span id="nametag-text">Ogu ✨ Algorta 📍</span>
+    </div>
+    <div id="loading">
+      <div id="loading-title">OGU</div>
+      <div id="loading-bar"><div id="loading-fill"></div></div>
+      <div id="loading-sub">iniciando...</div>
+    </div>
+  </div>
+
+  <!-- ── SEPARADOR ────────────────────────────────────────────────────── -->
+  <div id="sep"></div>
+
+  <!-- ── CHAT ─────────────────────────────────────────────────────────── -->
+  <div id="chat">
+    <div id="messages">
+      <div id="empty">oli 😻</div>
+    </div>
+    <div id="typing" aria-label="Ogu está escribiendo">
+      <div class="dot-bounce"></div>
+      <div class="dot-bounce"></div>
+      <div class="dot-bounce"></div>
+    </div>
+    <div id="inputbar">
+      <div id="input-wrap">
+        <textarea id="input" placeholder="escribe algo..." rows="1"
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        </textarea>
+      </div>
+      <button id="sendbtn" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ── Three.js ──────────────────────────────────────────────────────────── -->
+<script type="importmap">
+{
+  "imports": {
+    "three":         "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE      from 'three';
+import { GLTFLoader }  from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader }   from 'three/addons/loaders/FBXLoader.js';
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+const $fill    = document.getElementById('loading-fill');
+const $sub     = document.getElementById('loading-sub');
+const $loading = document.getElementById('loading');
+const $dot     = document.getElementById('dot');
+const $nametag = document.getElementById('nametag-text');
+
+const MOOD_EMOJI = {
+  Idle:'✨', Talking:'💬', Thinking:'💭', Happy:'😻',
+  Laughing:'😂', Angry:'😤', Sad:'😿', Surprised:'😱',
+  Walking:'🚶', Dance:'💃', DanceHipHop:'💃', DanceHouse:'💃',
+};
+
+function setProgress(pct, label) {
+  $fill.style.width = pct + '%';
+  if (label) $sub.textContent = label;
+}
+function hideLoader() {
+  $loading.style.opacity = '0';
+  setTimeout(() => $loading.remove?.(), 800);
+}
+function setMood(name) {
+  const e = MOOD_EMOJI[name] ?? '✨';
+  $nametag.textContent = `Ogu ${e} Algorta 📍`;
+}
+
+// ── Renderer ──────────────────────────────────────────────────────────────
+const sceneEl = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(sceneEl.clientWidth, sceneEl.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0x080A14, 1);
+sceneEl.insertBefore(renderer.domElement, sceneEl.firstChild);
+
+const onResize = () => {
+  renderer.setSize(sceneEl.clientWidth, sceneEl.clientHeight);
+  camera.aspect = sceneEl.clientWidth / sceneEl.clientHeight;
+  camera.updateProjectionMatrix();
+};
+window.addEventListener('resize', onResize);
+
+// ── Escena ────────────────────────────────────────────────────────────────
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, sceneEl.clientWidth / sceneEl.clientHeight, 0.01, 50);
+let camBase = { x:0, y:1.08, z:1.65 };
+camera.position.set(camBase.x, camBase.y, camBase.z);
+camera.lookAt(0, camBase.y, 0);
+
+// ── Fondo degradado ───────────────────────────────────────────────────────
+(function() {
+  const cv = document.createElement('canvas');
+  cv.width = 2; cv.height = 256;
+  const ctx = cv.getContext('2d');
+  const g   = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0,    '#080A14');
+  g.addColorStop(0.55, '#0e0820');
+  g.addColorStop(1,    '#17082e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2, 256);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 20),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), depthWrite: false })
+  );
+  mesh.position.set(0, 5, -6);
+  mesh.renderOrder = -1;
+  scene.add(mesh);
+})();
+
+// ── Iluminación ───────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x1e1030, 1.6));
+
+const key = new THREE.DirectionalLight(0xfff2e0, 1.9);
+key.position.set(-2, 3.5, 2.5);
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xd880ff, 0.55);
+fill.position.set(2.5, 1.5, 2);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x88ccff, 0.6);
+rim.position.set(1, 5, -3);
+scene.add(rim);
+
+const pinkPt = new THREE.PointLight(0xff6b9d, 0.45, 5);
+pinkPt.position.set(0, 0.4, 0.9);
+scene.add(pinkPt);
+
+// ── Glow disc ─────────────────────────────────────────────────────────────
+const glowDisc = new THREE.Mesh(
+  new THREE.CircleGeometry(0.65, 64),
+  new THREE.MeshBasicMaterial({
+    color:0xff6b9d, transparent:true, opacity:0.11, depthWrite:false, side:THREE.DoubleSide
+  })
+);
+glowDisc.rotation.x = -Math.PI / 2;
+glowDisc.position.y = 0.005;
+glowDisc.visible    = false;
+scene.add(glowDisc);
+
+// ── Partículas ────────────────────────────────────────────────────────────
+const NP   = 45;
+const pPos = new Float32Array(NP * 3);
+const pVel = new Float32Array(NP * 3);
+for (let i = 0; i < NP; i++) {
+  pPos[i*3]   = (Math.random()-.5) * 4.5;
+  pPos[i*3+1] = Math.random() * 3.2;
+  pPos[i*3+2] = Math.random() - 2;
+  pVel[i*3]   = (Math.random()-.5) * .0025;
+  pVel[i*3+1] = .0028 + Math.random() * .004;
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+scene.add(new THREE.Points(pGeo,
+  new THREE.PointsMaterial({
+    color:0xff6b9d, size:.018, transparent:true, opacity:.35,
+    sizeAttenuation:true, depthWrite:false
+  })
+));
+function tickParticles() {
+  const a = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) {
+    a[i*3]   += pVel[i*3];
+    a[i*3+1] += pVel[i*3+1];
+    if (a[i*3+1] > 3.5)             { a[i*3+1]=0; a[i*3]=(Math.random()-.5)*4.5; }
+    if (Math.abs(a[i*3]) > 2.2)     pVel[i*3] *= -1;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+}
+
+// ── Sistema de animaciones ────────────────────────────────────────────────
+let mixer = null, curAction = null;
+const clips    = {};
+const ONE_SHOT = new Set(['Happy','Surprised','Laughing','Dance','DanceHipHop','DanceHouse']);
+
+const ANIM_DEFS = [
+  ['Idle','OguAnim_Idle.fbx'],['Talking','OguAnim_Talking.fbx'],
+  ['Angry','OguAnim_Angry.fbx'],['Walking','OguAnim_Walking.fbx'],
+  ['Happy','OguAnim_Wave.fbx'],['Laughing','OguAnim_DanceTwerk.fbx'],
+  ['Thinking','OguAnim_Texting.fbx'],['Surprised','OguAnim_Wave.fbx'],
+  ['Sad','OguAnim_Idle.fbx'],['Dance','OguAnim_Dance.fbx'],
+  ['DanceHipHop','OguAnim_DanceHipHop.fbx'],['DanceHouse','OguAnim_DanceHouse.fbx'],
+];
+
+function normalizeClip(clip) {
+  clip.tracks.forEach(t => {
+    t.name = t.name
+      .replace(/^[^|]+\|/, '')
+      .replace(/mixamorig\d+/gi, 'mixamorig');
+  });
+  return clip;
+}
+
+// ← llamado desde el chat JS (misma página, no hace falta postMessage)
+window.setAnimation = function(name) {
+  setMood(name);
+  if (!mixer) return;
+  const clip = clips[name] ?? clips['Idle'];
+  if (!clip) return;
+  const next = mixer.clipAction(clip);
+  if (next === curAction) return;
+  const loop = !ONE_SHOT.has(name);
+  next.reset();
+  next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+  next.clampWhenFinished = !loop;
+  if (curAction) curAction.crossFadeTo(next, 0.25, true);
+  next.play();
+  curAction = next;
+  if (!loop) {
+    const cb = e => { if (e.action===next) { mixer.removeEventListener('finished',cb); window.setAnimation('Idle'); } };
+    mixer.addEventListener('finished', cb);
+  }
+};
+
+// ── Carga modelo + animaciones ────────────────────────────────────────────
+const gltf = new GLTFLoader();
+const fbx  = new FBXLoader();
+
+setProgress(5, 'cargando...');
+
+gltf.load('Ogu.glb', gltfData => {
+  const model = gltfData.scene;
+
+  // Auto-escala 1.7m
+  const b1 = new THREE.Box3().setFromObject(model);
+  const h  = b1.max.y - b1.min.y;
+  if (h > 0) model.scale.setScalar(1.7 / h);
+
+  // Pies en y=0
+  const b2 = new THREE.Box3().setFromObject(model);
+  model.position.y = -b2.min.y;
+
+  scene.add(model);
+  glowDisc.visible = true;
+
+  mixer = new THREE.AnimationMixer(model);
+
+  // Log huesos para debug
+  const bones = [];
+  model.traverse(o => { if (o.isBone) bones.push(o.name); });
+  if (!bones.length) model.traverse(o => { if (o.isSkinnedMesh) o.skeleton.bones.forEach(b=>bones.push(b.name)); });
+  console.log('[Ogu] Bones:', bones.slice(0,4).join(', '));
+
+  // Deduplicar FBX
+  const seen = new Map();
+  const queue = [];
+  for (const [name, file] of ANIM_DEFS) {
+    if (!seen.has(file)) { seen.set(file, null); queue.push({name, file}); }
+  }
+
+  let done = 0, total = queue.length;
+
+  function onLoaded(name, file, data) {
+    if (data?.animations?.length) {
+      const c = normalizeClip(data.animations[0].clone());
+      c.name = name; clips[name] = c; seen.set(file, c);
+      console.log(`[Ogu] ${name} → ${c.tracks[0]?.name}`);
+    }
+    // Alias para FBX compartidos
+    for (const {name:n, file:f} of ANIM_DEFS) {
+      if (!clips[n] && seen.get(f)) clips[n] = seen.get(f);
+    }
+    done++;
+    setProgress(20 + Math.round(done/total*76), `anim ${done}/${total}...`);
+    if (done === total) {
+      setProgress(100);
+      window.setAnimation('Idle');
+      $dot.classList.add('ready');
+      setTimeout(hideLoader, 400);
+    }
+  }
+
+  for (const {name, file} of queue) {
+    fbx.load(file, d => onLoaded(name,file,d), undefined, ()=>onLoaded(name,file,null));
+  }
+
+}, undefined, err => { $sub.textContent='error 😿'; console.error(err); });
+
+// ── Render loop ────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+(function loop() {
+  requestAnimationFrame(loop);
+  const t = clock.elapsedTime;
+  const d = clock.getDelta();
+  mixer?.update(d);
+  tickParticles();
+  // Micro-sway
+  camera.position.set(
+    camBase.x + Math.sin(t*.18)*.007,
+    camBase.y + Math.sin(t*.11)*.004,
+    camBase.z
+  );
+  camera.lookAt(0, camBase.y, 0);
+  pinkPt.intensity = .38 + Math.sin(t*.5)*.12;
+  renderer.render(scene, camera);
+})();
+</script>
+
+<!-- ── Chat JS ─────────────────────────────────────────────────────────────── -->
+<script>
+const WORKER = 'https://bold-disk-14a8.joniturbu.workers.dev';
+
+// userId persistente
+let userId = localStorage.getItem('ogu_uid');
+if (!userId) {
+  userId = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,
+    c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+  localStorage.setItem('ogu_uid', userId);
+}
+
+const $msgs    = document.getElementById('messages');
+const $empty   = document.getElementById('empty');
+const $typing  = document.getElementById('typing');
+const $input   = document.getElementById('input');
+const $sendbtn = document.getElementById('sendbtn');
+
+let busy = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function addMsg(text, isUser) {
+  $empty?.remove?.();
+  const div = document.createElement('div');
+  div.className = 'msg ' + (isUser ? 'user' : 'ogu');
+  div.textContent = text;
+  $msgs.appendChild(div);
+  $msgs.scrollTop = $msgs.scrollHeight;
+}
+
+function scrollDown() {
+  requestAnimationFrame(() => { $msgs.scrollTop = $msgs.scrollHeight; });
+}
+
+// ── Auto-resize textarea ──────────────────────────────────────────────────
+$input.addEventListener('input', () => {
+  $input.style.height = 'auto';
+  $input.style.height = Math.min($input.scrollHeight, 100) + 'px';
+});
+
+// ── Enviar ────────────────────────────────────────────────────────────────
+async function send() {
+  const text = $input.value.trim();
+  if (!text || busy) return;
+
+  $input.value = '';
+  $input.style.height = 'auto';
+  busy = true;
+  $sendbtn.disabled = true;
+
+  addMsg(text, true);
+  $typing.classList.add('show');
+  scrollDown();
+  window.setAnimation?.('Thinking');
+
+  let oguMsgs = [], animName = '';
+
+  try {
+    const r = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, message: text }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const d = await r.json();
+    oguMsgs  = d.messages  ?? [];
+    animName = d.animation ?? '';
+  } catch {}
+
+  if (!oguMsgs.length) oguMsgs = ['😿'];
+
+  $typing.classList.remove('show');
+  if (animName) window.setAnimation?.(animName);
+
+  for (let i = 0; i < oguMsgs.length; i++) {
+    if (i > 0) {
+      $typing.classList.add('show');
+      scrollDown();
+      await sleep(1200 + Math.random() * 350);
+      $typing.classList.remove('show');
+    }
+    addMsg(oguMsgs[i], false);
+    scrollDown();
+  }
+
+  window.setAnimation?.('Idle');
+  busy = false;
+  $sendbtn.disabled = false;
+  $input.focus();
+}
+
+$sendbtn.addEventListener('click', send);
+$input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+// ── Haptic (si disponible) ────────────────────────────────────────────────
+$sendbtn.addEventListener('pointerdown', () => {
+  navigator.vibrate?.(8);
+});
+</script>
+</body>
+</html>
