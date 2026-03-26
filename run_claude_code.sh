@@ -1,6 +1,12 @@
 #!/bin/bash
-# Solicitar al usuario que seleccione el archivo donde se ejecutará Claude Code o A TI
-read -p "Introduce la ruta del archivo: " file_path
+
+# Verificar si se proporcionó un argumento
+if [ $# -eq 0 ]; then
+    echo "Uso: $0 <ruta_del_archivo>"
+    exit 1
+fi
+
+file_path="$1"
 
 # Verificar si el archivo existe
 if [ ! -f "$file_path" ]; then
@@ -8,5 +14,13 @@ if [ ! -f "$file_path" ]; then
   exit 1
 fi
 
-# Ejecutar el archivo seleccionado
-python3 "$file_path"
+# Directorio de destino
+destination_dir="/add/C:/Users/jonit/Desktop/canciones"
+
+# Crear el directorio de destino si no existe
+mkdir -p "$destination_dir"
+
+# Mover el archivo al directorio de destino
+mv "$file_path" "$destination_dir"
+
+echo "Archivo movido a $destination_dir"
