@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Run Claude Code
+Comment=Ejecuta Claude Code o A TI desde cualquier lugar
+Exec=/ruta/al/run_claude_code.sh
+Icon=/ruta/al/icono.png
+Terminal=false
+Type=Application
+Categories=Utility;Application;
